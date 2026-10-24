@@ -9,9 +9,14 @@
 -- None (0) means no situation ever asks for it, so it never plays.
 -- probabilityWithinSituation is a weight between candidates, not a gate, so it is left alone.
 --
--- Rows are matched by playLabel rather than row name or order, so a game patch that reorders
--- the table does not break the mod. Original values are cached the first time a row is seen,
--- which lets every mode, Vanilla included, be reached again without restarting the game.
+-- The battle-start and victory lines use Encount (1) and Result (12). Their labels are not
+-- listed here; those rows are matched by the situation they shipped with instead.
+--
+-- Rows are matched by playLabel or shipped playSituation rather than row order, so a game
+-- patch that reorders the table does not break the mod. Original values are cached by row
+-- name the first time a row is seen, which lets every mode, Vanilla included, be reached
+-- again without restarting the game. Situation matching has to use that cached value: once
+-- a row is set to None, its live value no longer says what it was.
 --
 -- No path in this file contains a backslash: paths use forward slashes, which Windows
 -- accepts, and string.char(92) stands in where a backslash has to be matched. A stray
@@ -24,6 +29,9 @@ local SITUATION_NONE = 0
 local TURN = { "VO_BTL_CMD_01_", "VO_BTL_CMD_02_", "VO_BTL_CMD_03_", "VO_BTL_CMD_04_" }
 local SKILL_SELECT = { "VO_BTL_CMD_11_", "VO_BTL_CMD_12_" }
 local BONUS_PHASE = { "VO_BTL_EXP_01_", "VO_BTL_EXP_02_", "VO_BTL_EXP_03_" }
+-- Situations, not labels: Encount (1) and Result (12).
+local ENCOUNTER_VICTORY = { [1] = true, [12] = true }
+local NO_SITUATIONS = {}
 
 -- Builds a label set from any number of label lists.
 local function Set(...)
@@ -40,8 +48,10 @@ local MODES = {
     [1] = { name = "Silent turns", off = Set(TURN) },
     [2] = { name = "Silent turns + skill select", off = Set(TURN, SKILL_SELECT) },
     [3] = { name = "Silent turns + skill select + bonus phase", off = Set(TURN, SKILL_SELECT, BONUS_PHASE) },
+    [4] = { name = "Silent turns + skill select + bonus phase + encounter/victory",
+            off = Set(TURN, SKILL_SELECT, BONUS_PHASE), offSituations = ENCOUNTER_VICTORY },
 }
-local MODE_COUNT = 4
+local MODE_COUNT = 5
 local DEFAULT_MODE = 1
 local CHECK_INTERVAL_MS = 2000
 
@@ -49,9 +59,10 @@ local CHECK_INTERVAL_MS = 2000
 local TRACKED = Set(TURN, SKILL_SELECT, BONUS_PHASE)
 
 local mode = DEFAULT_MODE
--- playLabel -> playSituation as shipped. Filled on first sight and never overwritten,
+-- row name -> playSituation as shipped. Filled on first sight and never overwritten,
 -- so a restore always goes back to the game's own value.
 local original = {}
+local reportedEncounterVictory = false
 
 local function Log(msg)
     print(MOD .. msg .. "\n")
@@ -102,25 +113,56 @@ local function LabelOf(row)
     return nil
 end
 
+-- ForEachRow passes the row name as a plain Lua string; ToString covers an FName as well.
+local function RowNameOf(name)
+    if type(name) == "string" then return name end
+    local ok, s = pcall(function() return name:ToString() end)
+    if ok and type(s) == "string" then return s end
+    return nil
+end
+
+-- Logs once which encounter/victory rows were found, so the log shows what mode 4 covers.
+local function ReportEncounterVictory(labels, count)
+    if reportedEncounterVictory or count == 0 then return end
+    reportedEncounterVictory = true
+    local list = {}
+    for label in pairs(labels) do list[#list + 1] = label end
+    table.sort(list)
+    Log("found " .. count .. " encounter/victory row(s): " .. table.concat(list, ", "))
+end
+
 -- Brings every tracked row to the state the current mode wants.
 -- Returns the number of rows changed, or nil if the table is not loaded.
 local function Apply()
     local dt = FindTable()
     if not dt then return nil end
     local off = MODES[mode].off
+    local offSituations = MODES[mode].offSituations or NO_SITUATIONS
     local changed = 0
-    dt:ForEachRow(function(_, row)
+    local seenLabels, seenCount = {}, 0
+    dt:ForEachRow(function(name, row)
+        local key = RowNameOf(name)
+        if not key then return end
+        local current = row.playSituation
+        if original[key] == nil then original[key] = current end
+        local shipped = original[key]
         local label = LabelOf(row)
-        if label and TRACKED[label] then
-            local current = row.playSituation
-            if original[label] == nil then original[label] = current end
-            local want = off[label] and SITUATION_NONE or original[label]
+        local byLabel = label and TRACKED[label]
+        local bySituation = ENCOUNTER_VICTORY[shipped]
+        if bySituation then
+            seenCount = seenCount + 1
+            seenLabels[label or "?"] = true
+        end
+        if byLabel or bySituation then
+            local silence = (byLabel and off[label]) or (bySituation and offSituations[shipped])
+            local want = silence and SITUATION_NONE or shipped
             if current ~= want then
                 row.playSituation = want
                 changed = changed + 1
             end
         end
     end)
+    ReportEncounterVictory(seenLabels, seenCount)
     return changed
 end
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2.0
+**Added**
+- **Mode 4 – Silent turns + skill select + bonus phase + encounter/victory:** everything mode 3 silences, plus the lines at the start of a battle and on victory. Handy when random battles are frequent.
+- The log now lists which encounter/victory lines were found the first time the battle voice table loads.
+
+**Fixed**
+- Modes could fail to apply without any error in the log, so turn-start lines such as "My turn!" still played. The mod now reads the battle voice table's row names correctly, and every mode takes effect again.
+
+**Upgrading from 1.1.0**
+- Modes 0–3 are unchanged, so your saved mode carries over. Press **F7** past mode 3 to reach mode 4.
+
 ## v1.1.0
 **Added**
 - Bonus-phase voice lines can now be silenced. After a **Sweeping Stagger**, every party member gets an extra action, and each one used to play a voice line. They're now covered by the new mode 3.

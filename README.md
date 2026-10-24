@@ -1,6 +1,6 @@
 # QuietTurnVoice
 
-A UE4SS Lua mod for **FINAL FANTASY RESONANCE** that stops characters saying a line ("my turn") at the start of every battle turn, and can also silence skill-select barks and the party lines that play during the bonus phase after a **Sweeping Stagger**. Story, skill, damage and victory voices are untouched. **F7** cycles modes in-game.
+A UE4SS Lua mod for **FINAL FANTASY RESONANCE** that stops characters saying a line ("my turn") at the start of every battle turn, and can also silence skill-select barks and the party lines that play during the bonus phase after a **Sweeping Stagger**, and, in mode 4, the battle-start and victory lines. Story, skill and damage voices are untouched. **F7** cycles modes in-game.
 
 | Mode | What is silenced |
 |---|---|
@@ -8,11 +8,12 @@ A UE4SS Lua mod for **FINAL FANTASY RESONANCE** that stops characters saying a l
 | **1 Silent turns** (default) | All turn-start lines |
 | 2 Silent turns + skill select | Also the bark when picking a skill |
 | 3 Silent turns + skill select + bonus phase | Also the lines spoken when party members take their bonus-phase action, including every member's action after a Sweeping Stagger |
+| 4 Silent turns + skill select + bonus phase + encounter/victory | Also the lines at the start of a battle and on victory |
 
 Each mode silences everything the one before it does, plus one more group. The chosen mode is saved to `QuietTurnVoice/mode.txt` and restored on the next launch.
 
 ## How it works
-Battle voices are chosen from the DataTable `/Game/Datatable/Battle/Sound/DT_BtlVoiceData`. The turn-start lines are the rows labelled `VO_BTL_CMD_01_`–`VO_BTL_CMD_04_` (situation `BeginCmd`), and the skill-select barks are `VO_BTL_CMD_11_`/`12_` (situation `SkillSelect`). The bonus-phase lines are `VO_BTL_EXP_01_`–`VO_BTL_EXP_03_` (situation `OpenExCmd`; "Ex" is the game's internal name for the bonus phase). A Sweeping Stagger gives every party member a bonus action, which is why those lines play once per member. The mod sets the selected rows' `playSituation` to `None` in memory, so the game never requests them. No game files are modified. Rows are matched by label, so the mod keeps working if a patch reorders the table.
+Battle voices are chosen from the DataTable `/Game/Datatable/Battle/Sound/DT_BtlVoiceData`. The turn-start lines are the rows labelled `VO_BTL_CMD_01_`–`VO_BTL_CMD_04_` (situation `BeginCmd`), and the skill-select barks are `VO_BTL_CMD_11_`/`12_` (situation `SkillSelect`). The bonus-phase lines are `VO_BTL_EXP_01_`–`VO_BTL_EXP_03_` (situation `OpenExCmd`; "Ex" is the game's internal name for the bonus phase). A Sweeping Stagger gives every party member a bonus action, which is why those lines play once per member. Battle-start and victory lines are every row whose shipped situation is `Encount` or `Result`; they are matched by situation rather than label. The mod sets the selected rows' `playSituation` to `None` in memory, so the game never requests them. No game files are modified. Rows are matched by label, so the mod keeps working if a patch reorders the table.
 
 ## Requirements
 - **UE4SS v4** (a release supporting UE 5.6) from the official project: https://github.com/UE4SS-RE/RE-UE4SS/releases
