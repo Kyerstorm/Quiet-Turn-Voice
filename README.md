@@ -10,7 +10,7 @@ A UE4SS Lua mod for **FINAL FANTASY RESONANCE** that stops characters saying a l
 | 3 Silent turns + skill select + bonus phase | Also the lines spoken when party members take their bonus-phase action, including every member's action after a Sweeping Stagger |
 | 4 Silent turns + skill select + bonus phase + encounter/victory | Also the lines at the start of a battle and on victory |
 
-Each mode silences everything the one before it does, plus one more group. The chosen mode is saved to `QuietTurnVoice/mode.txt` and restored on the next launch.
+Each mode silences everything the one before it does, plus one more group. Pressing F7 shows the new mode at the top of the screen for a couple of seconds. The chosen mode is saved to `QuietTurnVoice/mode.txt` and restored on the next launch.
 
 ## How it works
 Battle voices are chosen from the DataTable `/Game/Datatable/Battle/Sound/DT_BtlVoiceData`. The turn-start lines are the rows labelled `VO_BTL_CMD_01_`–`VO_BTL_CMD_04_` (situation `BeginCmd`), and the skill-select barks are `VO_BTL_CMD_11_`/`12_` (situation `SkillSelect`). The bonus-phase lines are `VO_BTL_EXP_01_`–`VO_BTL_EXP_03_` (situation `OpenExCmd`; "Ex" is the game's internal name for the bonus phase). A Sweeping Stagger gives every party member a bonus action, which is why those lines play once per member. Battle-start and victory lines are every row whose shipped situation is `Encount` or `Result`; they are matched by situation rather than label. The mod sets the selected rows' `playSituation` to `None` in memory, so the game never requests them. No game files are modified. Rows are matched by label, so the mod keeps working if a patch reorders the table.
@@ -32,4 +32,5 @@ Delete `ue4ss/Mods/QuietTurnVoice/`. To remove UE4SS entirely, delete `dwmapi.dl
 ## Troubleshooting
 - **Nothing changes in battle:** check `UE4SS.log` for `[QuietTurnVoice] mode ... applied`. If that line never appears, the table was not found (a patch may have renamed it).
 - **F7 mid-battle doesn't take effect until the next battle:** the game may read the table when a battle starts; the mode still applies from the next battle.
+- **No popup when pressing F7:** check `UE4SS.log` for `overlay unavailable`. The mode still switches; only the popup is turned off, and the log line shows the reason.
 - **`apply failed` in the log:** the UE4SS build may not support DataTable editing (`ForEachRow` needs UE4SS v4). Update UE4SS.

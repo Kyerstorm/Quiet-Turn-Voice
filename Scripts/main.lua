@@ -18,6 +18,10 @@
 -- again without restarting the game. Situation matching has to use that cached value: once
 -- a row is set to None, its live value no longer says what it was.
 --
+-- F7 shows the new mode on screen as a small widget built at runtime. PrintString would be
+-- simpler, but it is compiled out of Shipping builds and draws nothing in this game. The
+-- toast is optional: if any part of it fails, the log line still records the switch.
+--
 -- No path in this file contains a backslash: paths use forward slashes, which Windows
 -- accepts, and string.char(92) stands in where a backslash has to be matched. A stray
 -- backslash in a path string is an invalid escape, and Lua then refuses the whole file.
@@ -54,6 +58,12 @@ local MODES = {
 local MODE_COUNT = 5
 local DEFAULT_MODE = 1
 local CHECK_INTERVAL_MS = 2000
+local TOAST_MS = 2500
+-- Z-order for the toast, high enough to draw above the game's own HUD.
+local TOAST_Z = 10000
+-- ESlateVisibility values: shown without catching clicks, or taking no space at all.
+local VISIBILITY_HIT_TEST_INVISIBLE = 3
+local VISIBILITY_COLLAPSED = 1
 
 -- Every label any mode can silence; only these rows are ever touched.
 local TRACKED = Set(TURN, SKILL_SELECT, BONUS_PHASE)
@@ -63,6 +73,13 @@ local mode = DEFAULT_MODE
 -- so a restore always goes back to the game's own value.
 local original = {}
 local reportedEncounterVictory = false
+-- { widget, text } once built. Lua does not keep UObjects alive, and a level load removes
+-- viewport widgets, so it is checked with IsValid before every use and rebuilt if needed.
+local toast = nil
+local toastBuilds = 0
+-- Bumped on every show, so a hide timer from an earlier press does nothing.
+local toastSerial = 0
+local toastDisabled = false
 
 local function Log(msg)
     print(MOD .. msg .. "\n")
@@ -70,6 +87,10 @@ end
 
 local function ModeName()
     return "mode " .. mode .. " [" .. MODES[mode].name .. "]"
+end
+
+local function ToastText()
+    return "Quiet Turn Voice - Mode " .. mode .. ": " .. MODES[mode].name
 end
 
 -- The mode file sits beside this mod's Scripts folder.
@@ -177,6 +198,76 @@ local function SafeApply(reason)
     end)
 end
 
+local function FindClass(path)
+    local cls = StaticFindObject(path)
+    if not (cls and cls:IsValid()) then error("class not found: " .. path) end
+    return cls
+end
+
+-- Builds the toast: a UserWidget whose tree is a dark Border holding one TextBlock.
+-- The widget's outer is the GameInstance, which lives for the whole session.
+local function BuildToast()
+    local gi = FindFirstOf("GameInstance")
+    if not (gi and gi:IsValid()) then error("no GameInstance yet") end
+    toastBuilds = toastBuilds + 1
+    local suffix = "_" .. toastBuilds
+    local widget = StaticConstructObject(FindClass("/Script/UMG.UserWidget"), gi, FName("QTV_Toast" .. suffix))
+    local tree = StaticConstructObject(FindClass("/Script/UMG.WidgetTree"), widget, FName("QTV_Tree" .. suffix))
+    local border = StaticConstructObject(FindClass("/Script/UMG.Border"), tree, FName("QTV_Border" .. suffix))
+    local text = StaticConstructObject(FindClass("/Script/UMG.TextBlock"), tree, FName("QTV_Text" .. suffix))
+    widget.WidgetTree = tree
+    tree.RootWidget = border
+    border:SetBrushColor({ R = 0, G = 0, B = 0, A = 0.65 })
+    border:SetPadding({ Left = 18, Top = 8, Right = 18, Bottom = 8 })
+    border:SetContent(text)
+    return { widget = widget, text = text }
+end
+
+local function ShowToastNow(msg)
+    if not (toast and toast.widget:IsValid() and toast.text:IsValid()) then
+        toast = BuildToast()
+    end
+    local widget = toast.widget
+    toast.text:SetText(FText(msg))
+    if not widget:IsInViewport() then
+        widget:AddToViewport(TOAST_Z)
+        -- Top-centre, a little below the edge, at any resolution.
+        widget:SetAnchorsInViewport({ Minimum = { X = 0.5, Y = 0.06 }, Maximum = { X = 0.5, Y = 0.06 } })
+        widget:SetAlignmentInViewport({ X = 0.5, Y = 0 })
+    end
+    widget:SetVisibility(VISIBILITY_HIT_TEST_INVISIBLE)
+end
+
+local function HideToast(serial)
+    if serial ~= toastSerial then return end
+    ExecuteInGameThread(function()
+        if serial ~= toastSerial then return end
+        pcall(function()
+            if toast and toast.widget:IsValid() then
+                toast.widget:SetVisibility(VISIBILITY_COLLAPSED)
+            end
+        end)
+    end)
+end
+
+-- Shows msg on screen for TOAST_MS. A failure is logged once and the toast is then left
+-- off for the session, so a UE4SS build without UMG support costs one log line.
+local function ShowToast(msg)
+    if toastDisabled then return end
+    ExecuteInGameThread(function()
+        local ok, err = pcall(ShowToastNow, msg)
+        if not ok then
+            toastDisabled = true
+            toast = nil
+            Log("overlay unavailable, mode switches are logged only: " .. tostring(err))
+            return
+        end
+        toastSerial = toastSerial + 1
+        local serial = toastSerial
+        ExecuteWithDelay(TOAST_MS, function() HideToast(serial) end)
+    end)
+end
+
 -- The table can load lazily at battle start and be unloaded again afterwards, so a quiet
 -- periodic check re-applies the mode whenever the table is found in its shipped state.
 -- Apply only writes rows that differ, so a check that finds nothing to do costs one lookup.
@@ -193,6 +284,7 @@ RegisterKeyBind(Key.F7, function()
     mode = (mode + 1) % MODE_COUNT
     SaveMode()
     Log("F7: switched to " .. ModeName())
+    ShowToast(ToastText())
     SafeApply("hotkey")
 end)
 

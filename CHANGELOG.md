@@ -3,6 +3,7 @@
 ## v1.2.0
 **Added**
 - **Mode 4 – Silent turns + skill select + bonus phase + encounter/victory:** everything mode 3 silences, plus the lines at the start of a battle and on victory. Handy when random battles are frequent.
+- **On-screen mode popup:** pressing **F7** now shows the new mode at the top of the screen for a couple of seconds, so you no longer need the log to see which mode you're in.
 - The log now lists which encounter/victory lines were found the first time the battle voice table loads.
 
 **Fixed**
