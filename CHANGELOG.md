@@ -1,0 +1,26 @@
+# Changelog
+
+## v1.1.0
+**Added**
+- Bonus-phase voice lines can now be silenced. After a **Sweeping Stagger**, every party member gets an extra action, and each one used to play a voice line. They're now covered by the new mode 3.
+
+**Changed**
+- Modes are now a simple ladder; each one silences everything the one before it does, plus one more group:
+  - **Mode 0 – Vanilla:** nothing silenced.
+  - **Mode 1 – Silent turns (default):** all turn-start lines.
+  - **Mode 2 – Silent turns + skill select:** also the bark when picking a skill.
+  - **Mode 3 – Silent turns + skill select + bonus phase:** also the bonus-phase / Sweeping Stagger party lines.
+- Still one key: **F7** cycles all modes.
+
+**Removed**
+- The "Situational only" mode, which turned off only the generic turn line.
+
+**Upgrading from 1.0.0**
+- Mode numbers have changed, so a saved mode from 1.0.0 may now select a different mode. After updating, press **F7** in-game to pick your mode again, or delete `ue4ss/Mods/QuietTurnVoice/mode.txt` to start from the default.
+
+## v1.0.0
+- Initial release.
+- Silences the turn-start voice lines (e.g. "My turn!") for all playable characters, in English and Japanese.
+- Four modes, cycled with **F7**: Vanilla, Situational only, Silent turns (default), and Silent turns + skill select.
+- Your chosen mode is saved between sessions.
+- No game files are modified; everything changes in memory while the game runs.
