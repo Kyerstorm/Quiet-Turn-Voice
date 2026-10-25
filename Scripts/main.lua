@@ -5,8 +5,9 @@
 -- barks use SkillSelect (3) with VO_BTL_CMD_11_ and VO_BTL_CMD_12_. The bonus-phase lines
 -- use OpenExCmd (4) with VO_BTL_EXP_01_ to VO_BTL_EXP_03_: "Ex" is the game's name for the
 -- bonus phase, and a sweeping stagger (FullBreak internally) gives every party member a
--- bonus action, so those lines play once per member. Setting a row's playSituation to
--- None (0) means no situation ever asks for it, so it never plays.
+-- bonus action, so those lines play once per member. The stagger itself uses LastHit (7),
+-- ActivateSkill (5) and LastAttackExit (14) rows, silenced with the bonus phase. Setting
+-- a row's playSituation to None (0) means no situation ever asks for it, so it never plays.
 -- probabilityWithinSituation is a weight between candidates, not a gate, so it is left alone.
 --
 -- The battle-start and victory lines use Encount (1) and Result (12). Their labels are not
@@ -18,7 +19,11 @@
 -- again without restarting the game. Situation matching has to use that cached value: once
 -- a row is set to None, its live value no longer says what it was.
 --
--- F7 shows the new mode on screen as a small widget built at runtime. PrintString would be
+-- The hotkey (F7 by default) is read from config.ini beside the Scripts folder. Key names
+-- are those of the UE4SS Key table (F8, NUM_FIVE, INS, ...); an unknown name falls back to
+-- F7 and says so in the log, so a typo never leaves the mod without a hotkey.
+--
+-- The hotkey shows the new mode on screen as a small widget built at runtime. PrintString would be
 -- simpler, but it is compiled out of Shipping builds and draws nothing in this game. The
 -- toast is optional: if any part of it fails, the log line still records the switch.
 --
@@ -32,7 +37,11 @@ local SITUATION_NONE = 0
 
 local TURN = { "VO_BTL_CMD_01_", "VO_BTL_CMD_02_", "VO_BTL_CMD_03_", "VO_BTL_CMD_04_" }
 local SKILL_SELECT = { "VO_BTL_CMD_11_", "VO_BTL_CMD_12_" }
-local BONUS_PHASE = { "VO_BTL_EXP_01_", "VO_BTL_EXP_02_", "VO_BTL_EXP_03_" }
+-- The stagger lines around the bonus phase are silenced with it: BRK_02/03 (LastHit, the
+-- hit that staggers), BRK_01 (ActivateSkill against a staggered enemy) and VLB_LAK_01
+-- (LastAttackExit). BRK_02/03 also play on an ordinary single-enemy stagger.
+local BONUS_PHASE = { "VO_BTL_EXP_01_", "VO_BTL_EXP_02_", "VO_BTL_EXP_03_",
+                      "VO_BTL_BRK_01_", "VO_BTL_BRK_02_", "VO_BTL_BRK_03_", "VO_BTL_VLB_LAK_01_" }
 -- Situations, not labels: Encount (1) and Result (12).
 local ENCOUNTER_VICTORY = { [1] = true, [12] = true }
 local NO_SITUATIONS = {}
@@ -57,6 +66,7 @@ local MODES = {
 }
 local MODE_COUNT = 5
 local DEFAULT_MODE = 1
+local DEFAULT_KEY = "F7"
 local CHECK_INTERVAL_MS = 2000
 local TOAST_MS = 2500
 -- Z-order for the toast, high enough to draw above the game's own HUD.
@@ -93,13 +103,58 @@ local function ToastText()
     return "Quiet Turn Voice - Mode " .. mode .. ": " .. MODES[mode].name
 end
 
--- The mode file sits beside this mod's Scripts folder.
-local function ModeFilePath()
+-- mode.txt and config.ini sit beside this mod's Scripts folder.
+local function ModFilePath(file)
     local here = debug and debug.getinfo and debug.getinfo(1, "S")
     local src = ((here and here.source) or ""):gsub(string.char(92), "/")
     local scripts = src:match("^@(.*)/[^/]+$")
     if not scripts then return nil end
-    return scripts .. "/../mode.txt"
+    return scripts .. "/../" .. file
+end
+
+local function ModeFilePath()
+    return ModFilePath("mode.txt")
+end
+
+-- Reads config.ini as key = value pairs. Sections are allowed but ignored, keys are
+-- case-insensitive, and lines starting with ; or # are comments. A missing file is empty.
+local function LoadConfig()
+    local cfg = {}
+    local path = ModFilePath("config.ini")
+    local f = path and io.open(path, "r")
+    if not f then return cfg end
+    for line in f:lines() do
+        local k, v = line:match("^%s*([^;#%[=][^=]-)%s*=%s*(.-)%s*$")
+        if k then cfg[k:lower()] = v end
+    end
+    f:close()
+    return cfg
+end
+
+-- Modifier names accepted in config.ini, mapped to UE4SS ModifierKey fields.
+local MODIFIERS = { CTRL = "CONTROL", CONTROL = "CONTROL", SHIFT = "SHIFT", ALT = "ALT" }
+
+-- Resolves the hotkey from config.ini. Returns the Key value, a list of ModifierKey values,
+-- and a display name such as "CTRL+F8". Anything unrecognised is logged and skipped.
+local function ResolveHotkey(cfg)
+    local name = (cfg.key or ""):upper()
+    if name == "" then name = DEFAULT_KEY end
+    if Key[name] == nil then
+        Log("config.ini: unknown key '" .. name .. "', using " .. DEFAULT_KEY)
+        name = DEFAULT_KEY
+    end
+    local mods, label = {}, {}
+    for word in (cfg.modifiers or ""):upper():gmatch("[%w_]+") do
+        local field = MODIFIERS[word]
+        if field and ModifierKey and ModifierKey[field] ~= nil then
+            mods[#mods + 1] = ModifierKey[field]
+            label[#label + 1] = word
+        else
+            Log("config.ini: unknown modifier '" .. word .. "', ignored")
+        end
+    end
+    label[#label + 1] = name
+    return Key[name], mods, table.concat(label, "+")
 end
 
 local function LoadMode()
@@ -280,13 +335,21 @@ RegisterInitGameStatePostHook(function()
     SafeApply("level load")
 end)
 
-RegisterKeyBind(Key.F7, function()
+local hotkey, hotkeyMods, hotkeyName = ResolveHotkey(LoadConfig())
+
+local function CycleMode()
     mode = (mode + 1) % MODE_COUNT
     SaveMode()
-    Log("F7: switched to " .. ModeName())
+    Log(hotkeyName .. ": switched to " .. ModeName())
     ShowToast(ToastText())
     SafeApply("hotkey")
-end)
+end
+
+if #hotkeyMods > 0 then
+    RegisterKeyBind(hotkey, hotkeyMods, CycleMode)
+else
+    RegisterKeyBind(hotkey, CycleMode)
+end
 
 LoadMode()
-Log("loaded, " .. ModeName() .. ". Press F7 to cycle modes.")
+Log("loaded, " .. ModeName() .. ". Press " .. hotkeyName .. " to cycle modes.")

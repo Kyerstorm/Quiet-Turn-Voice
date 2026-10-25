@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.1
+**Added**
+- **Configurable hotkey:** the new `config.ini` lets you change the mode-cycling key from **F7** to any key in the UE4SS Key Code Reference, optionally with **CTRL**, **SHIFT** and/or **ALT**. An unknown key name falls back to F7 and is reported in `UE4SS.log`.
+
+**Fixed**
+- Some Sweeping Stagger lines, such as "Let's end this!", could still play in modes 3 and 4. Mode 3 now also silences the stagger lines around the bonus phase: the line for the hit that staggers an enemy, the line for attacking a staggered enemy, and the line at the end of the Last Attack. These stagger lines are now silent for ordinary single-enemy staggers as well.
+
+**Upgrading from 1.2.0**
+- Copy the new `config.ini` into `ue4ss/Mods/QuietTurnVoice/`. Without it the mod keeps using F7.
+
 ## v1.2.0
 **Added**
 - **Mode 4 – Silent turns + skill select + bonus phase + encounter/victory:** everything mode 3 silences, plus the lines at the start of a battle and on victory. Handy when random battles are frequent.
